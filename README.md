@@ -26,6 +26,7 @@ CLIENT_PASS="Your lower-privileged MySQL user password here"
 SERVER_PASS="Your higher-privileged MySQL user password here"
 ```
 You will need to set up a reCAPTCHA v3 application [here](https://www.google.com/recaptcha/admin/create)
+Make sure to set up both the public reCAPTCHA key on the `signup` and `login` page as well as the secret key in the `.env` file.
 
 ## Setting up the database
 
