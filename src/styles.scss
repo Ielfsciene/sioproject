@@ -19,8 +19,8 @@ body, html {
 	padding: 0;
 }
 #calendar {
-	height: 100%;
-	padding: 0 10px;
+	margin: 0 auto;
+	padding: 1vw;
 }
 .fc-header-toolbar {
 	margin: 10px 0;
@@ -30,4 +30,16 @@ body, html {
 	right: 30px;
 	bottom: 30px;
 	z-index: 1000;
+}
+
+@media (max-width: 768px) { /* Adjustments for smaller screens */
+    #calendar {
+        padding: 3vw;
+    }
+}
+
+@media (min-width: 1200px) { /* Adjustments for larger screens */
+    #calendar {
+        padding: 0.5vw;
+    }
 }

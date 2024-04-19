@@ -303,39 +303,71 @@ app.post('/reset-password', upload.none(), async (req, res) => {
 	})
 })
 
-// Return user information
-app.get('/api/users', (req, res) => {
-	const userId = req.query.user_id
-	const token = req.cookies.token
-	if (!token) {
-		// 401 Unauthorized
-		return res.status(401).json({ message: 'Authentication required' })
-	}
-	try {
-		// TODO manage View Users permission
-		const verified = JWT.verify(token, process.env.JWT_KEY)
+// Create new meeting
+app.post('/api/meetings', upload.none(), authenticate, (req, res) => {
+	const { meetingDate, meetingTime, centerId, departmentId, doctorId } = req.body
+	const { user_id } = req.user
+	// Combine date and time
+	const dateTime = `${meetingDate}T${meetingTime}:00`
 
-		let query = 'SELECT id, first_name, last_name, email FROM users' // Limit the fields for privacy
-		let params = []
-
-		if (userId) {
-			query += ' WHERE id = ?'
-			params.push(userId)
+	// Check for existing meeting at the same time
+	const checkQuery = 'SELECT id FROM meetings WHERE patient_id = ? AND meeting_date = ?'
+	clientPool.query(checkQuery, [user_id, dateTime], (err, results) => {
+		if (err) {
+			console.error(`Database error: ${err}`)
+			// 500 Internal Server Error
+			return res.status(500).json({ message: 'Internal Server Error' })
+		}
+		if (results.length > 0) {
+			// 409 Conflict
+			return res.status(409).json({ message: 'Un rendez-vous à cette heure existe déjà' })
 		}
 
-		serverPool.query(query, params, (err, data) => {
+		// Insert new meeting if no existing conflict
+		const insertQuery = 'INSERT INTO meetings (patient_id, center_id, department_id, professional_id, meeting_date) VALUES (?, ?, ?, ?, ?)'
+		serverPool.query(insertQuery, [user_id, centerId, departmentId, doctorId, dateTime], (err, result) => {
 			if (err) {
-				console.error(`Error while querying '/api/users/': ${err}`)
+				console.error(`Database error during insert: ${err}`)
 				// 500 Internal Server Error
 				return res.status(500).json({ message: 'Internal Server Error' })
 			}
-			res.json(data)
+			// 201 Created
+			res.status(201).json({ message: 'Rendez-vous planifié avec succès !', meetingId: result.insertId })
 		})
-	} catch (error) {
-		console.error(`JWT verification error: ${error}`)
-		// 401 Unauthorized
-		res.status(401).json({ message: 'Jeton de session expiré ou invalide' })
-	}
+	})
+})
+
+// Return user information with optional filters for user_id and department
+app.get('/api/users', authenticate, (req, res) => {
+    const { user_id, department } = req.query
+
+	// Limit the fields for privacy
+    let query = 'SELECT id, first_name, last_name, email FROM users'
+    let params = []
+    let conditions = []
+
+    // Add conditions based on provided query parameters
+    if (user_id) {
+        conditions.push('id = ?')
+        params.push(user_id)
+    }
+    if (department) {
+        conditions.push('department = ?')
+        params.push(department)
+    }
+
+    // Append conditions to query if any
+    if (conditions.length > 0) {
+        query += ' WHERE ' + conditions.join(' AND ')
+    }
+
+    clientPool.query(query, params, (err, data) => {
+        if (err) {
+            console.error(`Error while querying '/api/users/': ${err}`)
+            return res.status(500).json({ message: 'Internal Server Error' })
+        }
+        res.json(data)
+    })
 })
 
 app.get('/api/user-info', (req, res) => {
@@ -359,32 +391,70 @@ app.get('/api/user-info', (req, res) => {
 				res.status(404).json({ isAuthenticated: false, message: 'Utilisateur inconnu ou inactif' })
 			}
 		})
-	} catch (error) {
-		console.error(`JWT verification error: ${error}`)
+	} catch(err) {
+		// console.error(`JWT verification error: ${err}`)
+		// 401 Unauthorized
 		res.status(401).json({ isAuthenticated: false, message: 'Jeton de session expiré ou invalide' })
 	}
 })
-app.get('/api/meetings' , (req, res) => {
-	const userId = req.user.user_id
-	const query = 'SELECT * FROM meetings WHERE patient_id = ? AND meeting_date > NOW() ORDER BY meeting_date ASC'
-	clientPool.query(query, [userId], (err, results) => {
+
+// Fetch all future meetings for a specific patient
+// This is sensitive information, the user must be authenticated to access it
+app.get('/api/meetings', (req, res) => {
+	const token = req.cookies.token
+	if (!token) {
+		return res.status(401).json({ isAuthenticated: false, message: 'Authentication required' })
+	}
+	
+	try {
+		const verified = JWT.verify(token, process.env.JWT_KEY)
+		const query = 'SELECT * FROM meetings WHERE patient_id = ? AND meeting_date > NOW() ORDER BY meeting_date ASC'
+		clientPool.query(query, [verified.user_id], (err, results) => {
+			if (err) {
+				console.error(`Database error when fetching meetings: ${err}`)
+				// 500 Internal Server Error
+				return res.status(500).json({ message: 'Internal Server Error' })
+			}
+			res.json(results)
+		})
+	} catch(err) {
+		// console.error(`JWT verification error: ${err}`)
+		// 401 Unauthorized
+		res.status(401).json({ isAuthenticated: false, message: 'Jeton de session expiré ou invalide' })
+	}
+})
+
+// Fetch all medical centers
+// This is not sensitive data, it can be fetched without authentication
+app.get('/api/centers', (req, res) => {
+	const query = 'SELECT id, name FROM centers' // Fetch only necessary fields
+	clientPool.query(query, (err, results) => {
 		if (err) {
-			console.error(`Database error when fetching meetings: ${err}`)
+			console.error(`Database error when fetching centers: ${err}`)
 			// 500 Internal Server Error
 			return res.status(500).json({ message: 'Internal Server Error' })
-
-			res.json(results)
 		}
+		res.json(results)
 	})
 })
-app.get('/api/departments' , (req, res) => {
-	
-})
-app.get('/api/user_type' , (req, res) => {
-	
-})
-app.get('/api/centers' , (req, res) => {
-	
+
+// Fetches all departments for a specific medical center
+// This is not sensitive data, it can be fetched without authentication
+app.get('/api/departments', (req, res) => {
+	const centerId = req.query.center_id
+	if (!centerId) {
+		// 400 Bad Request
+		return res.status(400).json({ message: 'Un centre médical doit être fourni' })
+	}
+	const query = 'SELECT id, name FROM departments WHERE center_id = ? AND is_doctor = 1'
+	serverPool.query(query, [centerId], (err, results) => {
+		if (err) {
+			console.error(`Database error when fetching departments: ${err}`)
+			// 500 Internal Server Error
+			return res.status(500).json({ message: 'Internal Server Error' })
+		}
+		res.json(results)
+	})
 })
 
 async function encryptPassword(password) {
