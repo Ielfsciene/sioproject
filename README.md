@@ -34,7 +34,7 @@ You will need to set up a MySQL server with two users (client and server) with t
 - Client (SELECT)
 - Server (SELECT, UPDATE, INSERT, EXECUTE)
 
-You will have to create a new database, and can then run [this](https://pastebin.com/K4fXJgm2) MySQL query to create the entire table structure.
+You can run the sql dump file on a MySQL database to set up the entire schema and dataset at once.
 
 ## Running the application
 
