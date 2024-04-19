@@ -5,6 +5,7 @@ const Express = require('express')
 const Bcrypt = require('bcrypt')
 const bodyParser = require('body-parser')
 const multer = require('multer')
+const cookieParser = require('cookie-parser')
 const JWT = require('jsonwebtoken')
 const app = Express()
 const upload = multer()
@@ -31,31 +32,60 @@ const clientPool = MySQL.createPool({
 })
 
 // Middlewares
-app.use(Express.static(PUBLIC_PATH))
+app.listen(PORT)
 app.use(Express.json())
-app.listen(PORT, () => {})
+app.use(Express.static(PUBLIC_PATH))
+app.use(bodyParser.urlencoded({ extended: false }))
+app.use(cookieParser())
 
+// Verifies that the user is currently authenticated and that their session token is still valid.
+function authenticate(req, res, next) {
+	const token = req.cookies.token
+	if (!token) {
+		// 401 Unauthorized
+		res.status(401).json({ message: 'Connexion nécessaire pour accéder à cette ressource' })
+		return res.redirect('/login')
+	}
+
+	try {
+		const verified = JWT.verify(token, process.env.JWT_KEY)
+		req.user = verified		// Add the decoded token to the request so it can be used in the handler
+		next()					// Continue to the next middleware/route handler
+	} catch (error) {
+		console.error(`JWT verification error: ${error}`)
+		// 401 Unauthorized
+		res.status(401).json({ message: 'Connexion nécessaire pour accéder à cette ressource' })
+		return res.redirect('/login')
+	}
+}
+
+// Routes. 'req' might look useless, but do not remove it.
+// If you remove 'req', 'res' will be treated as 'req' and that'll brick the entire script.
 app.get('/signup', (req, res) => {
 	const htmlPath = Path.join(__dirname, '../routes/signup.html')
 	res.sendFile(htmlPath)
 })
+// Not to be confused with the POST endpoint of the same name
 app.get('/login', (req, res) => {
 	const htmlPath = Path.join(__dirname, '../routes/login.html')
+	res.sendFile(htmlPath)
+})
+app.get('/reset-password', (req, res) => {
+	const htmlPath = Path.join(__dirname, '../routes/reset-password.html')
 	res.sendFile(htmlPath)
 })
 app.get('/home', (req, res) => {
 	const htmlPath = Path.join(__dirname, '../routes/home.html')
 	res.sendFile(htmlPath)
 })
+app.get('/scheduler', authenticate, (req, res) => {
+	const htmlPath = Path.join(__dirname, '../routes/scheduler.html')
+	res.sendFile(htmlPath)
+})
 app.get('/todo', (req, res) => {
 	const htmlPath = Path.join(__dirname, '../routes/todo.html')
 	res.sendFile(htmlPath)
 })
-
-/**
- * All API endpoints are defined below
- */
-app.use(bodyParser.urlencoded({ extended: false }))
 
 /**
  * SIGNUP
@@ -68,11 +98,13 @@ app.post('/create-account', upload.none(), async (req, res) => {
 	clientPool.query(userQuery, [email], async (err, data, fields) => {
 		if (err) {
 			console.error(`Database error: ${err}`)
+			// 500 Internal Server Error
 			return res.status(500).json({ message: 'Internal Server Error' })
 		}
 
 		if (data.length !== 0) {
 			// Email already registered
+			// 409 Conflict
 			return res.status(409).json({
 				field: 'email',
 				message: 'Cette adresse email est déjà utilisée.'
@@ -101,13 +133,13 @@ app.post('/create-account', upload.none(), async (req, res) => {
 							const hashedPassword = await encryptPassword(password)
 							const signupQuery = `INSERT INTO users (first_name, last_name, dob, email, phone_number, password_hash) VALUES (?, ?, ?, ?, ?, ?)`
 							serverPool.query(signupQuery, [first_name, last_name, dob || null, email, phone, hashedPassword], (err) => {
-								// 500 Internal Server Error
 								if (err) {
 									console.error(`Database error during signup: ${err}`)
+									// 500 Internal Server Error
 									return res.status(500).json({ message: 'Internal Server Error' })
 								}
 								// 201 Created
-								return res.status(418).json({
+								return res.status(201).json({
 									message: 'Compte créé avec succès !',
 									redirect: '/login'
 								})
@@ -127,6 +159,7 @@ app.post('/create-account', upload.none(), async (req, res) => {
 				}
 			} catch (err) {
 				console.error(`Error hashing password: ${err}`)
+				// 500 Internal Server Error
 				return res.status(500).json({ message: 'Internal Server Error' })
 			}
 		}
@@ -135,8 +168,9 @@ app.post('/create-account', upload.none(), async (req, res) => {
 
 /**
  * LOGIN
+ * Do not confuse this for the GET request of the same endpoint
  */
-app.post('/login', (req, res) => {
+app.post('/login', upload.none(), (req, res) => {
 	const { email, password, recaptchaToken } = req.body
 	if (!email || !password) {
 		// 400 Bad Request
@@ -205,6 +239,70 @@ app.post('/login', (req, res) => {
 	})
 })
 
+/**
+ * RESET PASSWORD
+ * Do not confuse this for the GET request of the same endpoint
+ * Please note that the reset password implementation has been dramatically simplified to hasten the implementation time.
+ * Given more time, I would have documented myself on the setting up of an SMTP system to get a proper reset procedure
+ * For reference, a normal implementation would have followed a flowchart of "Forgot password" → "Send unique password reset email" → "Reset password"
+ * Instead we directly reset passwords from step 1. This is obviously very unsafe, but given the time constraint, this is a sacrifice I had to make
+ */
+app.post('/reset-password', upload.none(), async (req, res) => {
+	const { email, password, recaptchaToken } = req.body
+	if (!email || !password) {
+		return res.status(400).json({ message: 'Veuillez fournir une adresse email et un nouveau mot de passe.' })
+	}
+
+	// First, verify the reCAPTCHA to ensure the request is from a legitimate source.
+	const recaptchaUrl = `https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`
+	try {
+		const response = await fetch(recaptchaUrl, { method: 'POST' })
+		const data = await response.json()
+
+		// reCAPTCHA success
+		// Score of 1.0 is almost certainly a human, while a score of 0.0 is almost certainly a bot.
+		if (!(data.success && data.score >= 0.6)) {
+			// 400 Bad Request
+			return res.status(400).json({ message: 'Échec de la vérification reCAPTCHA, veuillez réessayer.' })
+		}
+	} catch (error) {
+		console.error(`Error verifying reCAPTCHA: ${error}`)
+		// 500 Internal Server Error
+		return res.status(500).json({ message: 'Une erreur a eu lieu pendant la vérification reCAPTCHA. Veuillez réessayer plus tard.' })
+	}
+
+	// Verify if the user exists in the database
+	const userQuery = 'SELECT id FROM users WHERE email = ? LIMIT 1'
+	clientPool.query(userQuery, [email], async (err, results) => {
+		if (err) {
+			console.error(`Database error: ${err}`)
+			// 500 Internal Server Error
+			return res.status(500).json({ message: 'Internal Server Error' })
+		}
+
+		if (results.length === 0) {
+			// 401 Unauthorized
+			return res.status(401).json({ message: 'Aucun utilisateur trouvé avec cette adresse email.' })
+		}
+
+		// Hash the new password before storing it
+		const hashedPassword = await encryptPassword(password)
+
+		// Update user's password in the database
+		const updateQuery = 'UPDATE users SET password_hash = ? WHERE id = ?'
+		serverPool.query(updateQuery, [hashedPassword, results[0].id], (err, updateResults) => {
+			if (err) {
+				console.error(`Database error on password update: ${err}`)
+				// 500 Internal Server Error
+				return res.status(500).json({ message: 'Internal Server Error' })
+			}
+
+			// 200 OK
+			res.status(200).json({ message: 'Mot de passe réinitialisé avec succès !', redirect: '/login' })
+		})
+	})
+})
+
 // Return user information
 app.get('/api/users', (req, res) => {
 	const userId = req.query.user_id
@@ -267,7 +365,17 @@ app.get('/api/user-info', (req, res) => {
 	}
 })
 app.get('/api/meetings' , (req, res) => {
-	
+	const userId = req.user.user_id
+	const query = 'SELECT * FROM meetings WHERE patient_id = ? AND meeting_date > NOW() ORDER BY meeting_date ASC'
+	clientPool.query(query, [userId], (err, results) => {
+		if (err) {
+			console.error(`Database error when fetching meetings: ${err}`)
+			// 500 Internal Server Error
+			return res.status(500).json({ message: 'Internal Server Error' })
+
+			res.json(results)
+		}
+	})
 })
 app.get('/api/departments' , (req, res) => {
 	
@@ -351,6 +459,10 @@ function getPasswordStats(password) {
 
 	return { lowercase, uppercase, numbers, specialCharacters, differentCharacters }
 }
+
+/**
+ * TODO: DRY this thing. We have a validators.js file now.
+ */
 
 // Entropy is a measure of the unpredictability of a password, how many possible combinations of characters it could contain
 function calculateEntropy(password) {

@@ -3,52 +3,55 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Login - Projet BTS SIO</title>
+	<title>Meeting Scheduler - Projet BTS SIO</title>
 	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+	<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
 </head>
 <body>
 	<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
 		<div class="container">
+			<a class="navbar-brand" href="/home">Meeting Scheduler</a>
 			<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
 				<span class="navbar-toggler-icon"></span>
 			</button>
 			<div class="collapse navbar-collapse" id="navbarNav">
-				<ul class="navbar-nav mr-auto">
-					<li class="nav-item active">
-						<a class="nav-link" href="/home">Home</a>
-					</li>
-				</ul>
 				<ul class="navbar-nav ml-auto">
 					<li class="nav-item">
-						<a class="btn btn-outline-success my-2 my-sm-0" href="/login">Log in</a>
+						<a class="btn btn-outline-success" href="/login">Log in</a>
 					</li>
 				</ul>
 			</div>
 		</div>
 	</nav>
 
-	<div class="container mt-4">
-		<form>
-			<!-- reCAPTCHA v3 integration -->
-			<input type="hidden" id="recaptchaToken" name="recaptchaToken">
-			<div class="mb-3">
-				<label for="inputEmail" class="form-label">Adresse email</label>
-				<input type="email" name="email" class="form-control" id="inputEmail" aria-describedby="emailHelp" placeholder="Enter email" required>
+	<div id="calendar"></div> <!-- FullCalendar's main container -->
+
+	<button id="createMeetingButton" class="btn btn-primary">Create Meeting</button>
+
+	<!-- Hidden modal for creating meetings -->
+	<div class="modal" tabindex="-1" role="dialog" style="display: none;">
+		<div class="modal-dialog" role="document">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title">New Meeting</h5>
+					<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+						<span aria-hidden="true">&times;</span>
+					</button>
+				</div>
+				<div class="modal-body">
+					<p>Modal body content goes here.</p>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-primary">Save changes</button>
+					<button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+				</div>
 			</div>
-			<div class="mb-3">
-				<label for="inputPassword" class="form-label">Mot de passe</label>
-				<input type="password" name="password" class="form-control" id="inputPassword" required>
-			</div>
-			<button type="submit" class="btn btn-primary">Se connecter</button>
-			<div id="messageBox" class="container" style="display:none"></div>
-		</form>
-		<a class="btn mt-2" href="/reset-password">Mot de passe oublié ?</a></br>
-		<a class="btn btn-outline-success mt-2" href="/signup">Pas de compte ? C'est par ici !</a>
+		</div>
 	</div>
 
 	<footer class="bg-dark text-light text-center text-lg-start position-absolute bottom-0 w-100">
 		<div class="text-center p-3">
-			© 2024 North HEALTH⠀
+			© 2024 North HEALTH
 			<a class="text-light" href="#">northhealth.com</a>
 		</div>
 	</footer>
@@ -56,7 +59,6 @@
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy" crossorigin="anonymous"></script>
-	<script src="https://www.google.com/recaptcha/api.js?render=6LfPEL0pAAAAAOxerY-ND1pUfPAO6tC4L4t0Ys4Y"></script>
-	<script src="login.js"></script>
+	<script src="scheduler.js"></script>
 </body>
 </html>

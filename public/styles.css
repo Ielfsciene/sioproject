@@ -1,0 +1,29 @@
+#passwordGuidelines {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.5s ease-in-out, opacity 0.5s ease-in-out;
+  opacity: 0;
+  pointer-events: none; }
+  .input-password:focus + #passwordGuidelines {
+    max-height: fit-content;
+    transition: max-height 0.2s ease-in-out, opacity 0.2s ease-in-out;
+    opacity: 1;
+    pointer-events: auto; }
+
+body, html {
+  height: 100%;
+  margin: 0;
+  padding: 0; }
+
+#calendar {
+  height: 100%;
+  padding: 0 10px; }
+
+.fc-header-toolbar {
+  margin: 10px 0; }
+
+#createMeetingButton {
+  position: fixed;
+  right: 30px;
+  bottom: 30px;
+  z-index: 1000; }
